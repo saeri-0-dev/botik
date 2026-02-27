@@ -40,8 +40,8 @@ ADMIN_UNS = {x.strip().lstrip("@").lower() for x in ADMINS_RAW.split(",") if x.s
 TZ_NAME = os.getenv("TZ", "Europe/Moscow")
 TZ = ZoneInfo(TZ_NAME)
 
-HW_CHAT_ID = env_int_required("HW_CHAT_ID")
-HW_THREAD_ID = env_int_required("HW_THREAD_ID")
+HW_CHAT_ID = -1003714586762  # статично
+HW_THREAD_ID = int(os.getenv("HW_THREAD_ID", "0"))  # можно оставить env, или тоже зафиксировать
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
