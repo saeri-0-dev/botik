@@ -1,4 +1,4 @@
-#bot-token: 8660115424:AAGn_h5EMSnAmzhJKDe-DxSeJjPtE1IkJYY
+
 #chat-id: -1002969008348
 #theme-general: 5
 #theme-homework: 8
@@ -1338,4 +1338,5 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+
     asyncio.run(main())
