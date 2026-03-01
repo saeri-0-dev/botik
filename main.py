@@ -1,7 +1,3 @@
-
-#chat-id: -1002969008348
-#theme-general: 5
-#theme-homework: 8
 import asyncio
 import os
 import random
@@ -31,8 +27,8 @@ def env_int_required(name: str) -> int:
     except:
         raise RuntimeError(f"{name} должно быть числом (int)")
 
-TOKEN = env_required("BOT_TOKEN")  # БЕЗ дефолта
-PASS = os.getenv("LOGIN_PASSWORD", "").strip()  # можно пустым (тогда логин только по админам)
+TOKEN = env_required("BOT_TOKEN")
+PASS = os.getenv("LOGIN_PASSWORD", "").strip()
 
 ADMINS_RAW = os.getenv("ADMIN_USERNAMES", "")
 ADMIN_UNS = {x.strip().lstrip("@").lower() for x in ADMINS_RAW.split(",") if x.strip()}
@@ -40,8 +36,12 @@ ADMIN_UNS = {x.strip().lstrip("@").lower() for x in ADMINS_RAW.split(",") if x.s
 TZ_NAME = os.getenv("TZ", "Europe/Moscow")
 TZ = ZoneInfo(TZ_NAME)
 
-HW_CHAT_ID = -1003714586762  # статично
-HW_THREAD_ID = int(os.getenv("HW_THREAD_ID", "0"))  # можно оставить env, или тоже зафиксировать
+HW_CHAT_ID = -1003714586762
+HW_THREAD_ID = int(os.getenv("HW_THREAD_ID", "0"))
+
+# Чат и тред для уведомлений — из переменных окружения
+NT_CHAT_ID = -1003714586762
+NT_THREAD_ID = int(os.getenv("NT_THREAD_ID", "0"))
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -50,9 +50,9 @@ DB_PATH = DATA_DIR / "db.json"
 
 router = Router()
 
-aut = set()  
+aut = set()
 wl = []
-st = {}  
+st = {}
 
 
 MAX_TG = 4096
@@ -132,11 +132,6 @@ def read_wl() -> list[str]:
                 a.append(s)
     return a
 
-def mentions_text() -> str:
-    if not wl:
-        return "\n\n(белый список пуст)"
-    return "\n\nУпоминание:\n" + " ".join(wl)
-
 
 # ---------- JSON "DB" ----------
 
@@ -147,9 +142,9 @@ def _db_default():
         "next_hw_id": 1,
         "next_hh_id": 1,
         "next_ht_id": 1,
-        "hw": [],  # list of dict
-        "hh": [],  # list of dict
-        "ht": [],  # list of dict
+        "hw": [],
+        "hh": [],
+        "ht": [],
     }
 
 async def db_init():
@@ -160,7 +155,6 @@ async def db_init():
             tmp.replace(DB_PATH)
             return
 
-        # если файл битый — не падаем молча
         try:
             json.loads(DB_PATH.read_text(encoding="utf-8"))
         except Exception as e:
@@ -191,8 +185,6 @@ async def hw_add(dt_iso: str, subj: str, kind: str, txt: str, fid: str, mode: in
             "txt": txt or "",
             "fid": fid or "",
             "mode": int(mode),
-            "r24": 0,
-            "r10": 0,
             "done": 0,
         })
         _save_db_unsafe(db)
@@ -211,19 +203,15 @@ async def hw_list_active():
                     row.get("txt", ""),
                     row.get("fid", ""),
                     int(row.get("mode", 1)),
-                    int(row.get("r24", 0)),
-                    int(row.get("r10", 0)),
                 ))
         return out
 
-async def hw_set_flags(i: int, r24=None, r10=None, done=None):
+async def hw_set_done(i: int):
     async with _db_lock:
         db = _load_db_unsafe()
         for row in db["hw"]:
             if int(row["id"]) == int(i):
-                if r24 is not None: row["r24"] = int(r24)
-                if r10 is not None: row["r10"] = int(r10)
-                if done is not None: row["done"] = int(done)
+                row["done"] = 1
                 break
         _save_db_unsafe(db)
 
@@ -238,8 +226,6 @@ async def hh_add(dt_iso: str) -> int:
             "id": hid,
             "dt": dt_iso,
             "msg_id": 0,
-            "r24": 0,
-            "r10": 0,
             "done": 0,
         })
         _save_db_unsafe(db)
@@ -263,8 +249,6 @@ async def hh_list():
                 int(row["id"]),
                 row["dt"],
                 int(row.get("msg_id", 0)),
-                int(row.get("r24", 0)),
-                int(row.get("r10", 0)),
                 int(row.get("done", 0)),
             ))
         rows.sort(key=lambda x: x[0], reverse=True)
@@ -279,20 +263,16 @@ async def hh_get(hid: int):
                     int(row["id"]),
                     row["dt"],
                     int(row.get("msg_id", 0)),
-                    int(row.get("r24", 0)),
-                    int(row.get("r10", 0)),
                     int(row.get("done", 0)),
                 )
         return None
 
-async def hh_set_flags(hid: int, r24=None, r10=None, done=None):
+async def hh_set_done(hid: int, done: int):
     async with _db_lock:
         db = _load_db_unsafe()
         for row in db["hh"]:
             if int(row["id"]) == int(hid):
-                if r24 is not None: row["r24"] = int(r24)
-                if r10 is not None: row["r10"] = int(r10)
-                if done is not None: row["done"] = int(done)
+                row["done"] = int(done)
                 break
         _save_db_unsafe(db)
 
@@ -356,7 +336,7 @@ async def send_hw_item(bot: Bot, dt: datetime, subj: str, kind: str, txt: str, f
     head = f"📌 ДЗ\n🗓 {fmt_dt(dt)}\n📚 {subj}\n"
 
     if kind == "text":
-        await send_hw_text(bot, head + "\n" + txt + mentions_text())
+        await send_hw_text(bot, head + "\n" + txt)
         return
 
     cap = head
@@ -374,9 +354,6 @@ async def send_hw_item(bot: Bot, dt: datetime, subj: str, kind: str, txt: str, f
     else:
         await send_hw_text(bot, head + "\n(неизвестный тип)")
 
-    if wl:
-        await send_hw_text(bot, "Упоминание:\n" + " ".join(wl))
-
 
 def hh_text(dt: datetime, ts) -> str:
     s = "📚 ДЗ ИСТОРИЯ\n"
@@ -388,7 +365,7 @@ def hh_text(dt: datetime, ts) -> str:
             s += f"Семинар {sem}:\n"
         w = who if who else "не выбрано"
         s += f"— {title} — {w}\n"
-    return s + mentions_text()
+    return s
 
 
 # ---------- Keyboards ----------
@@ -438,8 +415,8 @@ def kb_hw_menu():
 
 def kb_hw_mode():
     kb = InlineKeyboardBuilder()
-    kb.button(text="🚀 Отправить сразу + напоминать", callback_data="hwm_1")
-    kb.button(text="⏰ Только напоминать", callback_data="hwm_2")
+    kb.button(text="🚀 Отправить сразу", callback_data="hwm_1")
+    kb.button(text="📥 Только сохранить", callback_data="hwm_2")
     kb.button(text="⬅️ Назад", callback_data="hw_menu")
     kb.adjust(1)
     return kb.as_markup()
@@ -468,7 +445,7 @@ def kb_hh_list(rows, page: int):
 
     kb = InlineKeyboardBuilder()
     for i in range(l, r):
-        hid, dt_s, msg_id, r24, r10, done = rows[i]
+        hid, dt_s, msg_id, done = rows[i]
         dt = datetime.fromisoformat(dt_s)
         kb.button(text=f"{hid}) {fmt_dt(dt)}", callback_data=f"hh_open_{hid}")
 
@@ -517,7 +494,6 @@ async def send_to_target(bot: Bot, cid: int, tid: int, text: str):
 
 @router.message(CommandStart())
 async def start(m: Message):
-    # отвечаем только в личке
     if not is_private(m):
         return
     await m.answer("Вход: /login пароль")
@@ -537,7 +513,6 @@ async def login(m: Message):
     if not is_private(m):
         return
 
-    # автологин по username
     if is_admin_user(m.from_user):
         aut.add(m.from_user.id)
         await m.answer("Ок (admin). Меню:", reply_markup=kb_main())
@@ -584,7 +559,7 @@ async def wl_refresh(cb: CallbackQuery):
     if need_login(cb):
         await cb.answer("Сначала /login пароль", show_alert=True)
         return
-    
+
     wl = read_wl()
     page = int(cb.data.split("_")[-1])
     txt, page, tp = await render_wl(page)
@@ -635,9 +610,12 @@ async def nt(cb: CallbackQuery):
     if need_login(cb):
         await cb.answer("Сначала /login пароль", show_alert=True)
         return
-    st_set(cb.from_user.id, mode="nt_where")
+    if NT_CHAT_ID == 0:
+        await cb.answer("NT_CHAT_ID не задан в переменных окружения", show_alert=True)
+        return
+    st_set(cb.from_user.id, mode="nt_text")
     await cb.message.edit_text(
-        "Уведомление.\nВведи chat_id и thread_id через пробел.\nПример: -100... 2\nЕсли не тема: thread_id = 0",
+        f"Уведомление будет отправлено в чат {NT_CHAT_ID} (тред {NT_THREAD_ID}).\nПришли текст (или txt документ).",
         reply_markup=kb_cancel()
     )
     await cb.answer()
@@ -665,7 +643,7 @@ async def hw_mode_pick(cb: CallbackQuery):
     if need_login(cb):
         await cb.answer("Сначала /login пароль", show_alert=True)
         return
-    mode = int(cb.data.split("_")[1])  # 1 или 2
+    mode = int(cb.data.split("_")[1])
     st_set(cb.from_user.id, mode="hw_dt", hw_mode=mode)
     await cb.message.edit_text(
         "Введи дату и время пары: YYYY-MM-DD HH:MM\nПример: 2026-03-01 09:00",
@@ -725,7 +703,7 @@ async def hh_open(cb: CallbackQuery):
     if not r:
         await cb.answer("Нет записи", show_alert=True)
         return
-    _, dt_s, msg_id, *_ = r
+    _, dt_s, msg_id, _ = r
     dt = datetime.fromisoformat(dt_s)
     ts = await ht_list(hid)
     txt = hh_text(dt, ts) + f"\n\nid: {hid}\nmsg_id: {msg_id}"
@@ -745,7 +723,7 @@ async def hh_del_cb(cb: CallbackQuery, bot: Bot):
     if not r:
         await cb.answer("Нет записи", show_alert=True)
         return
-    _, _, msg_id, *_ = r
+    _, _, msg_id, _ = r
     if msg_id:
         try:
             await bot.delete_message(HW_CHAT_ID, msg_id)
@@ -828,18 +806,16 @@ async def hh_edit(cb: CallbackQuery, bot: Bot):
         await cb.answer("Нет записи", show_alert=True)
         return
 
-    _, dt_s, msg_id, *_ = r
+    _, dt_s, msg_id, _ = r
     dt = datetime.fromisoformat(dt_s)
     ts = await ht_list(hid)
     txt = hh_text(dt, ts)
-
 
     if msg_id:
         try:
             await bot.delete_message(HW_CHAT_ID, msg_id)
         except:
             pass
-
 
     try:
         new_id = await send_long(bot, HW_CHAT_ID, txt, HW_THREAD_ID)
@@ -849,8 +825,6 @@ async def hh_edit(cb: CallbackQuery, bot: Bot):
 
     await hh_set_msg(hid, new_id)
     await cb.answer("Заменил ✅")
-
-
     await hh_open(cb)
 
 @router.callback_query(F.data.startswith("hh_new_"))
@@ -866,7 +840,7 @@ async def hh_new(cb: CallbackQuery, bot: Bot):
     if not r:
         await cb.answer("Нет записи", show_alert=True)
         return
-    _, dt_s, _, *_ = r
+    _, dt_s, _, _ = r
     dt = datetime.fromisoformat(dt_s)
     ts = await ht_list(hid)
     txt = hh_text(dt, ts)
@@ -909,27 +883,8 @@ async def any_msg(m: Message, bot: Bot):
 
     mode = st_get(m.from_user.id, "mode")
 
-    # ----- notify step 1 -----
-    if mode == "nt_where":
-        t = (m.text or "").split()
-        if len(t) != 2:
-            await m.answer("Нужно: chat_id thread_id\nПример: -100... 2")
-            return
-        try:
-            cid = int(t[0])
-            tid = int(t[1])
-        except:
-            await m.answer("Это должны быть числа.")
-            return
-        st_set(m.from_user.id, mode="nt_text", cid=cid, tid=tid)
-        await m.answer("Теперь пришли текст (или txt документ).", reply_markup=kb_cancel())
-        return
-
-    # ----- notify step 2 -----
+    # ----- notify: text -----
     if mode == "nt_text":
-        cid = st_get(m.from_user.id, "cid")
-        tid = st_get(m.from_user.id, "tid")
-
         txt = ""
         if m.text:
             txt = m.text.strip()
@@ -941,12 +896,8 @@ async def any_msg(m: Message, bot: Bot):
             await m.answer("Пришли текст или TXT документом.")
             return
 
-
-        wl = read_wl()
-        out = txt + mentions_text()
-
         try:
-            await send_to_target(bot, cid, tid, out)
+            await send_to_target(bot, NT_CHAT_ID, NT_THREAD_ID, txt)
         except Exception as e:
             await m.answer(f"Не смог отправить: {e}")
             return
@@ -1008,7 +959,6 @@ async def any_msg(m: Message, bot: Bot):
         else:
             await m.answer("Пришли текст или медиа.")
             return
-
 
         wl = read_wl()
 
@@ -1101,7 +1051,6 @@ async def any_msg(m: Message, bot: Bot):
             await m.answer(f"Семинар {sem_list[idx]}: сколько тем?", reply_markup=kb_cancel())
             return
 
-        # всё, назначения
         st_set(m.from_user.id, mode="hh_assign", hid=hid)
         await m.answer("Темы введены ✅ Переходим к назначениям.")
         await show_assign_lists(bot, m.chat.id, hid)
@@ -1136,7 +1085,7 @@ async def any_msg(m: Message, bot: Bot):
                 await m.answer("Нет записи.")
                 return
 
-            _, dt_s, msg_id, *_ = r
+            _, dt_s, msg_id, _ = r
             dt = datetime.fromisoformat(dt_s)
             ts = await ht_list(hid)
             out = hh_text(dt, ts)
@@ -1229,7 +1178,7 @@ async def any_msg(m: Message, bot: Bot):
                     pass
 
         ts = await ht_list(hid)
-        free = [x for x in ts if not x[3]]  # who empty
+        free = [x for x in ts if not x[3]]
         used = [x[3] for x in ts if x[3]]
         used_set = set(used)
 
@@ -1240,7 +1189,7 @@ async def any_msg(m: Message, bot: Bot):
             return
 
         cand1 = [u for u in cand if u not in used_set]
-        cand2 = [u for u in cand]  # fallback
+        cand2 = [u for u in cand]
         base = cand1 if cand1 else cand2
 
         random.shuffle(base)
@@ -1257,7 +1206,7 @@ async def any_msg(m: Message, bot: Bot):
         st_clear(m.from_user.id)
 
         r = await hh_get(hid)
-        _, dt_s, msg_id, *_ = r
+        _, dt_s, msg_id, _ = r
         dt = datetime.fromisoformat(dt_s)
         ts2 = await ht_list(hid)
         prev = "🎲 Рандом готов.\n\n" + hh_text(dt, ts2) + f"\n\nid: {hid}\nmsg_id: {msg_id}"
@@ -1266,50 +1215,26 @@ async def any_msg(m: Message, bot: Bot):
         return
 
 
-# ==================== TICK ====================
+# ==================== TICK (только архивация) ====================
 
 async def tick(bot: Bot):
-    global wl
-    wl = read_wl()
     now = datetime.now(TZ)
 
-    # обычное дз
+    # Архивируем просроченное обычное дз
     rows = await hw_list_active()
-    for i, dt_s, subj, kind, txt, fid, mode, r24, r10 in rows:
+    for i, dt_s, subj, kind, txt, fid, mode in rows:
         dt = datetime.fromisoformat(dt_s)
-        t24 = dt - timedelta(hours=24)
-        t10 = dt - timedelta(hours=10)
-
-        if r24 == 0 and abs((now - t24).total_seconds()) < 60:
-            await send_hw_text(bot, f"⏰ Напоминание: до пары ~24 часа\n🗓 {fmt_dt(dt)}\n📚 {subj}" + mentions_text())
-            await hw_set_flags(i, r24=1)
-
-        if r10 == 0 and abs((now - t10).total_seconds()) < 60:
-            await send_hw_text(bot, f"⏰ Напоминание: до пары ~10 часов\n🗓 {fmt_dt(dt)}\n📚 {subj}" + mentions_text())
-            await hw_set_flags(i, r10=1)
-
         if now >= dt:
-            await hw_set_flags(i, done=1)
+            await hw_set_done(i)
 
-    # история
+    # Архивируем просроченную историю
     hh = await hh_list()
-    for hid, dt_s, msg_id, r24, r10, done in hh:
+    for hid, dt_s, msg_id, done in hh:
         if done == 1:
             continue
         dt = datetime.fromisoformat(dt_s)
-        t24 = dt - timedelta(hours=24)
-        t10 = dt - timedelta(hours=10)
-
-        if r24 == 0 and abs((now - t24).total_seconds()) < 60:
-            await send_hw_text(bot, f"⏰ История: до пары ~24 часа\n🗓 {fmt_dt(dt)}" + mentions_text())
-            await hh_set_flags(hid, r24=1)
-
-        if r10 == 0 and abs((now - t10).total_seconds()) < 60:
-            await send_hw_text(bot, f"⏰ История: до пары ~10 часов\n🗓 {fmt_dt(dt)}" + mentions_text())
-            await hh_set_flags(hid, r10=1)
-
         if now >= dt:
-            await hh_set_flags(hid, done=1)
+            await hh_set_done(hid, 1)
 
 
 # ==================== MAIN ====================
@@ -1338,5 +1263,4 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-
     asyncio.run(main())
