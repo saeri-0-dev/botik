@@ -36,11 +36,11 @@ ADMIN_UNS = {x.strip().lstrip("@").lower() for x in ADMINS_RAW.split(",") if x.s
 TZ_NAME = os.getenv("TZ", "Europe/Moscow")
 TZ = ZoneInfo(TZ_NAME)
 
-HW_CHAT_ID = -1003714586762
+HW_CHAT_ID = -1002969008348
 HW_THREAD_ID = int(os.getenv("HW_THREAD_ID", "0"))
 
 # Чат и тред для уведомлений — из переменных окружения
-NT_CHAT_ID = -1003714586762
+NT_CHAT_ID = -1002969008348
 NT_THREAD_ID = int(os.getenv("NT_THREAD_ID", "0"))
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
@@ -1263,4 +1263,5 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+
     asyncio.run(main())
