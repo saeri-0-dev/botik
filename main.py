@@ -37,7 +37,7 @@ TZ_NAME = os.getenv("TZ", "Europe/Moscow")
 TZ = ZoneInfo(TZ_NAME)
 
 HW_CHAT_ID = -1002969008348
-HW_THREAD_ID = int(os.getenv("HW_THREAD_ID", "0"))
+HW_THREAD_ID = 8
 
 # Чат и тред для уведомлений — из переменных окружения
 NT_CHAT_ID = -1002969008348
@@ -1265,3 +1265,4 @@ async def main():
 if __name__ == "__main__":
 
     asyncio.run(main())
+
